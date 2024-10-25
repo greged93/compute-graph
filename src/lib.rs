@@ -1,5 +1,5 @@
 use eyre::Result;
-use std::{cell::RefCell, fmt::Debug, rc::Rc};
+use std::{cell::Cell, fmt::Debug, rc::Rc};
 
 /// A type that represents an empty state.
 #[derive(Default)]
@@ -15,7 +15,7 @@ pub struct Builder<T = Empty> {
     /// Holds a reference with inner mutable state to the input values.
     /// This is used to fill in the values of the input nodes when
     /// [`Builder::fill_nodes`] is called.
-    inputs: Vec<Rc<RefCell<Option<u32>>>>,
+    inputs: Vec<Rc<Cell<Option<u32>>>>,
     /// Holds a list of nodes on which equality will be checked when
     /// [`Builder::check_constraints`] is called.
     assertions: Vec<(Node, Node)>,
@@ -36,7 +36,7 @@ pub enum Node {
     /// A constant value.
     Constant(u32),
     /// An input node with the index of the input.
-    Input(Rc<RefCell<Option<u32>>>, u8),
+    Input(Rc<Cell<Option<u32>>>, u8),
     /// A hint that allows you to perform operations that are not supported by the graph
     /// (e.g. division, square root).
     Hint(Hint, Rc<Node>),
@@ -64,7 +64,7 @@ impl Node {
         match self {
             Node::Sum(a, b) => a.eval() + b.eval(),
             Node::Mul(a, b) => a.eval() * b.eval(),
-            Node::Input(i, _) => i.borrow().unwrap(),
+            Node::Input(i, _) => i.get().unwrap(),
             Node::Constant(i) => *i,
             Node::Hint(hint, a) => hint(a.eval()),
         }
@@ -76,7 +76,7 @@ impl Builder<Empty> {
     pub fn init(&mut self) -> Node {
         tracing::info!("Creating a new input node: input_{}", self.inputs.len());
 
-        let input_node = Rc::new(RefCell::new(None));
+        let input_node = Rc::new(Cell::new(None));
         self.inputs.push(input_node.clone());
         Node::Input(input_node, self.inputs.len() as u8 - 1)
     }
@@ -125,7 +125,7 @@ impl Builder<Empty> {
         }
 
         for (input, value) in self.inputs.iter().zip(input_values.iter()) {
-            *input.borrow_mut() = Some(*value);
+            input.set(Some(*value))
         }
 
         Ok(Builder {
